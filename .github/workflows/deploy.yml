@@ -26,9 +26,21 @@ jobs:
           node-version: 20
           cache: yarn
 
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - run: yarn install --frozen-lockfile
 
-      - run: yarn build
+      - run: |
+          export NODE_OPTIONS="--max_old_space_size=8192"
+          export PUBLIC_URL="/Viewers/"
+          yarn build
+
+      - name: Verify build output
+        run: |
+          ls -la platform/app
+          ls -la platform/app/dist
 
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -36,7 +48,6 @@ jobs:
 
   deploy:
     needs: build
-
     runs-on: ubuntu-latest
 
     environment:
