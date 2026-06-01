@@ -1,9 +1,9 @@
-name: Deploy OHIF to GitHub Pages
+name: Deploy OHIF Docs
 
 on:
   push:
     branches:
-      - main
+      - master
 
 permissions:
   contents: read
@@ -24,23 +24,25 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: yarn
 
-      - run: yarn install --frozen-lockfile
-      - run: yarn build
+      - run: yarn install
+
+      - run: |
+          cd platform/docs
+          yarn install
+          yarn build
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: platform/app/dist
+          path: platform/docs/build
 
   deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
     needs: build
+
     runs-on: ubuntu-latest
 
+    environment:
+      name: github-pages
+
     steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - uses: actions/deploy-pages@v4
