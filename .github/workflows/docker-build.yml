@@ -13,10 +13,6 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: care-ecosystem/radiology-ohif
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -49,7 +45,6 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/care-ecosystem/radiology-ohif
-
           tags: |
             type=ref,event=branch
             type=sha,prefix=sha-
@@ -60,6 +55,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: Dockerfile
           push: true
 
           tags: ${{ steps.meta.outputs.tags }}
@@ -71,10 +67,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Output image details
+      - name: Summary
         run: |
-          echo "## Docker Image Built Successfully 🚀" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           echo "Image: ghcr.io/care-ecosystem/radiology-ohif" >> $GITHUB_STEP_SUMMARY
+          echo "PUBLIC_URL=/radiology-ohif/" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
