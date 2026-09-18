@@ -3,6 +3,10 @@
     {
       "packageName": "@ohif/extension-default"
     },
+     {
+      "packageName": "care-image-actions",
+      "version": "0.0.1"
+    },
     {
       "packageName": "@ohif/extension-cornerstone",
       "version": "3.0.0"
