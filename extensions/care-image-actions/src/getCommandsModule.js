@@ -2,17 +2,7 @@
 export default function getCommandsModule({ servicesManager }) {
   const actions = {
     copyViewportImage: async () => {
-      const {
-        viewportGridService,
-        cornerstoneViewportService,
-        uiNotificationService,
-      } = servicesManager.services; // ← read fresh, at click time
-
-      console.log('[care-image-actions] services:', {
-        viewportGridService,
-        cornerstoneViewportService,
-        uiNotificationService,
-      });
+      const { viewportGridService, cornerstoneViewportService } = servicesManager.services;
 
       if (!cornerstoneViewportService) {
         console.error('[care-image-actions] cornerstoneViewportService not registered');
@@ -23,7 +13,7 @@ export default function getCommandsModule({ servicesManager }) {
       const viewportInfo = cornerstoneViewportService.getViewportInfo(activeViewportId);
 
       if (!viewportInfo) {
-        console.warn('[care-image-actions] No active viewport info found');
+        console.warn('[care-image-actions] No active viewport found');
         return;
       }
 
@@ -33,15 +23,20 @@ export default function getCommandsModule({ servicesManager }) {
         return;
       }
 
-      canvas.toBlob(async blob => {
-        if (!blob) return;
-        try {
-          await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-          uiNotificationService.show({ title: 'Copied', message: 'Image copied to clipboard' });
-        } catch (err) {
-          console.error('[care-image-actions] clipboard write failed:', err);
-          uiNotificationService.show({ title: 'Copy failed', message: err.message, type: 'error' });
+      canvas.toBlob(blob => {
+        if (!blob) {
+          console.warn('[care-image-actions] canvas.toBlob() returned null');
+          return;
         }
+
+        const targetOrigin = document.referrer
+          ? new URL(document.referrer).origin
+          : window.location.origin;
+
+        window.parent.postMessage(
+          { source: 'ohif-viewer', type: 'COPY_VIEWPORT_IMAGE', blob },
+          targetOrigin
+        );
       }, 'image/png');
     },
   };
