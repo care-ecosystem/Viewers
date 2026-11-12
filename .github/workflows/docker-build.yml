@@ -1,5 +1,14 @@
 name: Build and Push OHIF Image
 
+# Branch pushes build and push the usual branch/sha tags.
+# A version tag (v1.2.0, v1.2.0-beta.1) additionally:
+#   - tags the image  v1.2.0, 1.2.0 and 1.2 (1.2 and latest only for stable versions)
+#   - publishes a GitHub Release with the pull command, the pinned digest, and
+#     docker-save tarballs for amd64 and arm64 so the image can be loaded on a
+#     machine with no registry access (docker load -i <file>.tar.gz)
+#
+#   git tag v1.2.0 && git push origin v1.2.0
+
 on:
   push:
     branches:
@@ -7,6 +16,8 @@ on:
       - main
       - dev
       - master
+    tags:
+      - 'v[0-9]*'
   workflow_dispatch:
 
 env:
@@ -35,6 +46,11 @@ jobs:
         id: vars
         run: echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
+      # Branch pushes: branch name, sha-xxxx, <branch>-<sha>, <branch>-<run>-<sha>,
+      #                plus latest on main/production.
+      # Version tags:  v1.2.0, 1.2.0, 1.2 (semver drops 1.2 and latest for
+      #                pre-releases such as v1.2.0-beta.1), plus the two
+      #                <ref>-<sha> forms above.
       - name: Extract metadata (tags, labels)
         id: meta
         uses: docker/metadata-action@v5
@@ -46,6 +62,9 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production' }}
             type=raw,value=${{ github.ref_name }}-${{ steps.vars.outputs.SHORT_SHA }}
             type=raw,value=${{ github.ref_name }}-${{ github.run_number }}-${{ steps.vars.outputs.SHORT_SHA }}
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
 
   # ── Job 2: Build per-arch images, push arch-suffixed staging tags ─────────────
   build-matrix:
@@ -166,7 +185,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Platforms:** \`linux/amd64\`, \`linux/arm64\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Ref:** \`${{ github.ref_name }}\` (${{ github.ref_type }})" >> $GITHUB_STEP_SUMMARY
           echo "**Run Number:** \`${{ github.run_number }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Commit SHA:** \`${{ needs.prepare.outputs.short_sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**PUBLIC_URL:** \`/\`" >> $GITHUB_STEP_SUMMARY
@@ -175,3 +194,111 @@ jobs:
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "${{ needs.prepare.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+  # ── Job 4 (version tags only): GitHub Release with image tarballs ────────────
+  release:
+    name: Publish GitHub Release
+    if: github.ref_type == 'tag'
+    needs: [prepare, create-manifest]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create the release
+      packages: read    # pull the image back for the tarballs
+
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Resolve multi-arch digest
+        id: digest
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          DIGEST=$(docker buildx imagetools inspect "${IMAGE}:${{ github.ref_name }}" --format '{{.Manifest.Digest}}')
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "${IMAGE}:${{ github.ref_name }} -> ${DIGEST}"
+
+      # Offline-install assets. Delete this step if nobody needs to load the
+      # image without registry access; the release is still created below.
+      - name: Export image tarballs (amd64, arm64)
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          TAG="${{ github.ref_name }}"
+          STAGING_TAG="${TAG}-${{ needs.prepare.outputs.short_sha }}"
+          mkdir -p dist
+
+          for ARCH in amd64 arm64; do
+            SRC="${IMAGE}:${STAGING_TAG}-${ARCH}"
+            OUT="dist/radiology-ohif-${TAG}-${ARCH}.tar.gz"
+            echo "→ ${SRC} -> ${OUT}"
+            docker pull --platform "linux/${ARCH}" "${SRC}"
+            # Retag so `docker load` yields ghcr.io/.../radiology-ohif:v1.2.0
+            # on the target machine rather than the arch-suffixed staging tag.
+            docker tag "${SRC}" "${IMAGE}:${TAG}"
+            docker save "${IMAGE}:${TAG}" | gzip > "${OUT}"
+            docker rmi "${IMAGE}:${TAG}" "${SRC}" >/dev/null
+          done
+
+          (cd dist && sha256sum *.tar.gz > SHA256SUMS)
+          ls -lh dist
+
+      - name: Write release notes
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          cat > notes.md <<EOF
+          ## OHIF viewer image ${TAG}
+
+          **Pull (multi-arch, linux/amd64 + linux/arm64):**
+          \`\`\`
+          docker pull ${IMAGE}:${VERSION}
+          \`\`\`
+
+          **Pinned by digest (recommended for deployments):**
+          \`\`\`
+          ${IMAGE}@${{ steps.digest.outputs.digest }}
+          \`\`\`
+
+          **Offline install:** download the tarball for your CPU architecture and run
+          \`\`\`
+          docker load -i radiology-ohif-${TAG}-amd64.tar.gz   # or -arm64
+          \`\`\`
+          Verify downloads against \`SHA256SUMS\`.
+
+          Commit: \`${{ github.sha }}\` · Build: #${{ github.run_number }}
+
+          ---
+          EOF
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          EXTRA=()
+          case "$TAG" in
+            *-alpha*|*-beta*|*-rc*) EXTRA+=(--prerelease); echo "Pre-release: $TAG" ;;
+          esac
+
+          # Generated notes (merged PRs since the previous tag) are appended
+          # after notes.md. Add --draft here if you want to review before it
+          # goes public.
+          if ! gh release create "$TAG" dist/* --title "$TAG" --notes-file notes.md --generate-notes "${EXTRA[@]}"; then
+            echo "gh release create failed (release may already exist) - replacing assets on the existing release."
+            gh release upload "$TAG" dist/* --clobber
+          fi
+
+      - name: Release summary
+        run: |
+          echo "## 🚀 Release ${{ github.ref_name }} published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Digest:** \`${{ steps.digest.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
