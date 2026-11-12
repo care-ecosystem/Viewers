@@ -1,6 +1,7 @@
 import { visitStudy, visitStudyOptions } from './visitStudy';
 import { addOHIFConfiguration, addOHIFGlobalCustomizations } from './OHIFConfiguration';
 import { checkForScreenshot } from './checkForScreenshot';
+import { checkForGridScreenshot } from './checkForGridScreenshot';
 import { checkForViewportScreenshot } from './checkForViewportScreenshot';
 import { screenShotPaths } from './screenShotPaths';
 import {
@@ -15,20 +16,24 @@ import {
   simulateNormalizedPathDragOnElement,
 } from './simulateDragOnElement';
 import { reduce3DViewportSize } from './reduce3DviewportSize';
-import { getMousePosition, initializeMousePositionTracker } from './mouseUtils';
+import { getMousePosition, initializeMousePositionTracker, type MouseButton } from './mouseUtils';
 import { getSUV } from './getSUV';
 import { getTMTVModalityUnit } from './getTMTVModalityUnit';
 import { getAnnotationStats } from './getAnnotationStats';
+import { getSegmentStats } from './getSegmentStats';
+import { roundNumbers } from './roundNumbers';
 import {
   expectAnnotationLabelText,
   expectAnnotationStatsText,
   measurementTextFormatters,
 } from './expectAnnotationText';
 import { clearAllAnnotations } from './clearAllAnnotations';
+import { drawFreehandContour } from './drawFreehandContour';
 import { scrollVolumeViewport } from './scrollVolumeViewport';
 import { attemptAction } from './attemptAction';
 import { addLengthMeasurement } from './addLengthMeasurement';
 import { getSvgAttribute } from './getSvgAttribute';
+import { countSvgPathPoints } from './countSvgPathPoints';
 import { getViewportCanvasStats } from './getViewportCanvasStats';
 import { navigateWithViewportArrow } from './navigateWithViewportArrow';
 import { contourShowOnlyNthSegment } from './contourShowOnlyNthSegment';
@@ -40,8 +45,10 @@ import {
   waitForAnyViewportNeedsRender,
   waitForViewportsRendered,
   waitForViewportRenderCycle,
+  waitForRenderCycleForAction,
   waitForPaintToSettle,
 } from './waitForViewportsRendered';
+import { waitForViewportNotBlank } from './waitForViewportNotBlank';
 
 export {
   visitStudy,
@@ -49,6 +56,7 @@ export {
   addOHIFConfiguration,
   addOHIFGlobalCustomizations,
   checkForScreenshot,
+  checkForGridScreenshot,
   checkForViewportScreenshot,
   screenShotPaths,
   simulateClicksOnElement,
@@ -61,18 +69,23 @@ export {
   reduce3DViewportSize,
   getMousePosition,
   initializeMousePositionTracker,
+  type MouseButton,
   getSUV,
   getTMTVModalityUnit,
   getAnnotationStats,
+  getSegmentStats,
+  roundNumbers,
   expectAnnotationLabelText,
   expectAnnotationStatsText,
   measurementTextFormatters,
   clearAllAnnotations,
+  drawFreehandContour,
   scrollVolumeViewport,
   attemptAction,
   addLengthMeasurement,
   subscribeToMeasurementAdded,
   getSvgAttribute,
+  countSvgPathPoints,
   getViewportCanvasStats,
   navigateWithViewportArrow,
   contourShowOnlyNthSegment,
@@ -80,7 +93,9 @@ export {
   waitForAnyViewportNeedsRender,
   waitForViewportsRendered,
   waitForViewportRenderCycle,
+  waitForRenderCycleForAction,
   waitForPaintToSettle,
+  waitForViewportNotBlank,
   press,
   withKeyHeld,
   test,

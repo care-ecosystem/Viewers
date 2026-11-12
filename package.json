@@ -1,10 +1,10 @@
 {
   "name": "ohif-monorepo-root",
   "private": true,
-  "packageManager": "pnpm@11.5.2",
+  "packageManager": "pnpm@12.8.1",
   "engines": {
     "node": ">=24",
-    "pnpm": ">=11"
+    "pnpm": ">=12"
   },
   "scripts": {
     "preinstall": "node preinstall.js",
@@ -115,6 +115,7 @@
     "postcss-loader": "6.2.1",
     "prettier": "3.6.2",
     "prettier-plugin-tailwindcss": "0.6.9",
+    "semver": "7.8.5",
     "shader-loader": "1.3.1",
     "source-map-support": "0.5.21",
     "style-loader": "1.3.0",
@@ -124,16 +125,11 @@
   "optionalDependencies": {
     "@playwright/test": "1.56.1"
   },
-  "husky": {
-    "hooks": {
-      "pre-commit": "lint-staged"
-    }
-  },
   "lint-staged": {
     "src/**/*.{js,json,css}": [
       "prettier --write",
       "git add"
     ]
   },
-  "version": "3.14.0-beta.30"
+  "version": "3.14.0-beta.86"
 }
